@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>흑백 ASCII Video Converter</title>
+  <title>ASCII Video Converter</title>
   <style>
     :root {
       --bg: #0f1115;
@@ -72,13 +72,17 @@
 
     label:first-child { margin-top: 0; }
 
-    input[type="file"] {
+    input[type="file"], input[type="text"] {
       width: 100%;
       padding: 12px;
       border: 1px dashed #52525b;
       border-radius: 12px;
       background: #0f1115;
       color: var(--text);
+    }
+
+    input[type="text"] {
+      border-style: solid;
     }
 
     input[type="range"] { width: 100%; }
@@ -191,8 +195,7 @@
 <body>
   <main>
     <section class="hero">
-      <h1>흑백 ASCII Video Converter</h1>
-      <p>영상을 업로드하면 브라우저 안에서 흑백 아스키아트 영상으로 변환하고, 완성 후 자동 다운로드합니다.</p>
+      <h1>ASCII Video Converter</h1>
     </section>
 
     <section class="layout">
@@ -200,15 +203,18 @@
         <label for="fileInput">1. 영상 업로드</label>
         <input id="fileInput" type="file" accept="video/*" />
 
-        <label for="colsRange">2. 문자 해상도</label>
+        <label for="outputNameInput">2. 다운로드 파일 이름</label>
+        <input id="outputNameInput" type="text" value="ascii-video" placeholder="예: my-ascii-video" />
+
+        <label for="colsRange">3. 문자 해상도</label>
         <div class="row"><span>낮음</span><strong><span id="colsValue">120</span> cols</strong><span>높음</span></div>
         <input id="colsRange" type="range" min="60" max="220" step="10" value="120" />
 
-        <label for="fontRange">3. 글자 크기</label>
+        <label for="fontRange">4. 글자 크기</label>
         <div class="row"><span>작게</span><strong><span id="fontValue">10</span> px</strong><span>크게</span></div>
         <input id="fontRange" type="range" min="7" max="18" step="1" value="10" />
 
-        <label for="fpsRange">4. 출력 FPS</label>
+        <label for="fpsRange">5. 출력 FPS</label>
         <div class="row"><span>가벼움</span><strong><span id="fpsValue">24</span> fps</strong><span>부드러움</span></div>
         <input id="fpsRange" type="range" min="10" max="30" step="1" value="24" />
 
@@ -225,10 +231,6 @@
         <progress id="progressBar" value="0" max="100"></progress>
         <div id="status">영상을 선택해 주세요.</div>
         <a id="downloadLink" class="download" hidden>변환된 영상 다운로드</a>
-
-        <div class="notice">
-          출력 형식은 브라우저 호환성이 좋은 <b>WebM</b>입니다. 긴 영상이나 높은 문자 해상도는 변환 중 브라우저가 느려질 수 있습니다.
-        </div>
       </aside>
 
       <section class="card">
@@ -249,6 +251,7 @@
     const ASCII_CHARS = "@%#*+=-:. "; // 어두움 -> 밝음
 
     const fileInput = document.getElementById("fileInput");
+    const outputNameInput = document.getElementById("outputNameInput");
     const colsRange = document.getElementById("colsRange");
     const fontRange = document.getElementById("fontRange");
     const fpsRange = document.getElementById("fpsRange");
@@ -318,6 +321,20 @@
       const m = Math.floor(seconds / 60).toString().padStart(2, "0");
       const s = Math.floor(seconds % 60).toString().padStart(2, "0");
       return `${m}:${s}`;
+    }
+
+    function sanitizeFileName(name) {
+      return (name || "ascii-video")
+        .trim()
+        .replace(/\.webm$/i, "")
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .replace(/\s+/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "") || "ascii-video";
+    }
+
+    function getOutputFileName() {
+      return `${sanitizeFileName(outputNameInput.value)}.webm`;
     }
 
     function prepareCanvas() {
@@ -431,6 +448,7 @@
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       objectUrl = URL.createObjectURL(file);
       currentFileName = file.name.replace(/\.[^.]+$/, "") || "ascii-video";
+      outputNameInput.value = `${sanitizeFileName(currentFileName)}-ascii`;
 
       video.src = objectUrl;
       video.load();
@@ -464,6 +482,7 @@
       stopBtn.disabled = false;
       stopBtn.classList.add("active");
       fileInput.disabled = true;
+      outputNameInput.disabled = true;
       colsRange.disabled = true;
       fontRange.disabled = true;
       fpsRange.disabled = true;
@@ -502,7 +521,7 @@
         const blob = new Blob(recordedChunks, { type: mimeType || "video/webm" });
         outputUrl = URL.createObjectURL(blob);
         downloadLink.href = outputUrl;
-        downloadLink.download = `${currentFileName}-ascii.webm`;
+        downloadLink.download = getOutputFileName();
         downloadLink.hidden = false;
 
         if (blob.size > 0) {
@@ -551,6 +570,7 @@
       stopBtn.disabled = true;
       stopBtn.classList.remove("active");
       fileInput.disabled = false;
+      outputNameInput.disabled = false;
       colsRange.disabled = false;
       fontRange.disabled = false;
       fpsRange.disabled = false;
