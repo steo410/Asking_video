@@ -111,7 +111,7 @@
       margin-top: 18px;
     }
 
-    button, .download {
+    button {
       border: 0;
       border-radius: 12px;
       padding: 13px 14px;
@@ -122,11 +122,13 @@
       text-decoration: none;
     }
 
+    #previewBtn { background: #52525b; }
     #startBtn { background: linear-gradient(135deg, var(--accent), #3b82f6); }
-    #stopBtn { background: #3f3f46; }
+    #stopBtn { background: #3f3f46; grid-column: 1 / -1; }
     #stopBtn.active { background: var(--danger); }
-    .download { display: block; background: linear-gradient(135deg, var(--accent2), #14b8a6); margin-top: 12px; }
-    .download[hidden] { display: none; }
+    #downloadBtn { display: block; width: 100%; background: linear-gradient(135deg, var(--accent2), #14b8a6); margin-top: 12px; }
+    #downloadBtn[hidden] { display: none; }
+    #replayBtn { background: #52525b; width: 100%; margin-top: 10px; }
 
     button:disabled {
       opacity: 0.45;
@@ -175,16 +177,32 @@
       background: black;
     }
 
-    video { display: none; }
+    #sourceVideo { display: none; }
 
-    .notice {
+    .output-wrap {
       margin-top: 14px;
-      padding: 12px;
-      border-radius: 12px;
-      background: rgba(139, 92, 246, 0.12);
-      color: #ddd6fe;
-      font-size: 13px;
-      line-height: 1.55;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: black;
+    }
+
+    .output-wrap[hidden] { display: none; }
+
+    .output-title {
+      padding: 10px 12px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .output-video {
+      display: block;
+      width: 100%;
+      max-height: 48vh;
+      background: black;
     }
 
     @media (max-width: 880px) {
@@ -224,13 +242,16 @@
         </div>
 
         <div class="buttons">
+          <button id="previewBtn" disabled>프레임 미리보기</button>
           <button id="startBtn" disabled>변환 시작</button>
+        </div>
+        <div class="buttons">
           <button id="stopBtn" disabled>중지</button>
         </div>
 
         <progress id="progressBar" value="0" max="100"></progress>
         <div id="status">영상을 선택해 주세요.</div>
-        <a id="downloadLink" class="download" hidden>변환된 영상 다운로드</a>
+        <button id="downloadBtn" hidden disabled>변환된 영상 다운로드</button>
       </aside>
 
       <section class="card">
@@ -240,6 +261,13 @@
         </div>
         <div class="canvas-wrap">
           <canvas id="asciiCanvas" width="960" height="540"></canvas>
+        </div>
+        <div id="outputWrap" class="output-wrap" hidden>
+          <div class="output-title">완성 영상 미리보기</div>
+          <video id="outputPreview" class="output-video" controls playsinline></video>
+          <div style="padding: 10px 12px; border-top: 1px solid var(--line);">
+            <button id="replayBtn" disabled>완성 영상 처음부터 다시보기</button>
+          </div>
         </div>
       </section>
     </section>
@@ -259,15 +287,19 @@
     const fontValue = document.getElementById("fontValue");
     const fpsValue = document.getElementById("fpsValue");
     const audioCheck = document.getElementById("audioCheck");
+    const previewBtn = document.getElementById("previewBtn");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
     const progressBar = document.getElementById("progressBar");
     const statusEl = document.getElementById("status");
-    const downloadLink = document.getElementById("downloadLink");
+    const downloadBtn = document.getElementById("downloadBtn");
     const videoInfo = document.getElementById("videoInfo");
     const video = document.getElementById("sourceVideo");
     const canvas = document.getElementById("asciiCanvas");
     const ctx = canvas.getContext("2d", { alpha: false });
+    const outputWrap = document.getElementById("outputWrap");
+    const outputPreview = document.getElementById("outputPreview");
+    const replayBtn = document.getElementById("replayBtn");
 
     const smallCanvas = document.createElement("canvas");
     const smallCtx = smallCanvas.getContext("2d", { willReadFrequently: true });
@@ -282,6 +314,7 @@
     let audioDestination = null;
     let currentFileName = "ascii-video";
     let isConverting = false;
+    let wasStoppedByUser = false;
 
     function updateRangeLabels() {
       colsValue.textContent = colsRange.value;
@@ -301,8 +334,14 @@
     function resetDownload() {
       if (outputUrl) URL.revokeObjectURL(outputUrl);
       outputUrl = null;
-      downloadLink.hidden = true;
-      downloadLink.removeAttribute("href");
+      downloadBtn.hidden = true;
+      downloadBtn.disabled = true;
+      downloadBtn.textContent = "변환된 영상 다운로드";
+      replayBtn.disabled = true;
+      outputPreview.pause();
+      outputPreview.removeAttribute("src");
+      outputPreview.load();
+      outputWrap.hidden = true;
     }
 
     function pickMimeType() {
@@ -335,6 +374,18 @@
 
     function getOutputFileName() {
       return `${sanitizeFileName(outputNameInput.value)}.webm`;
+    }
+
+    function seekVideo(time) {
+      return new Promise(resolve => {
+        const target = Math.min(Math.max(time, 0), Math.max((video.duration || 0) - 0.05, 0));
+        const done = () => {
+          video.removeEventListener("seeked", done);
+          resolve();
+        };
+        video.addEventListener("seeked", done, { once: true });
+        video.currentTime = target;
+      });
     }
 
     function prepareCanvas() {
@@ -452,6 +503,7 @@
 
       video.src = objectUrl;
       video.load();
+      previewBtn.disabled = true;
       startBtn.disabled = true;
       setStatus("영상 정보를 읽는 중입니다...");
 
@@ -459,10 +511,25 @@
         canvasConfig = prepareCanvas();
         video.currentTime = 0;
         videoInfo.textContent = `${video.videoWidth}×${video.videoHeight} · ${formatTime(video.duration)}`;
+        previewBtn.disabled = false;
         startBtn.disabled = false;
         progressBar.value = 0;
-        setStatus("준비 완료. 변환 시작을 누르세요.");
+        setStatus("준비 완료. 프레임 미리보기 또는 변환 시작을 누르세요.");
       };
+    });
+
+    previewBtn.addEventListener("click", async () => {
+      if (!fileInput.files?.[0]) {
+        setStatus("먼저 영상을 업로드해 주세요.");
+        return;
+      }
+      resetDownload();
+      video.pause();
+      canvasConfig = prepareCanvas();
+      await seekVideo(video.currentTime || 0.01);
+      drawAsciiFrame();
+      progressBar.value = 0;
+      setStatus("현재 설정으로 프레임 미리보기를 표시했습니다. 설정을 바꾸고 다시 누르면 바로 확인할 수 있습니다.");
     });
 
     startBtn.addEventListener("click", async () => {
@@ -478,6 +545,8 @@
       resetDownload();
       recordedChunks = [];
       isConverting = true;
+      wasStoppedByUser = false;
+      previewBtn.disabled = true;
       startBtn.disabled = true;
       stopBtn.disabled = false;
       stopBtn.classList.add("active");
@@ -519,16 +588,30 @@
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop());
         const blob = new Blob(recordedChunks, { type: mimeType || "video/webm" });
-        outputUrl = URL.createObjectURL(blob);
-        downloadLink.href = outputUrl;
-        downloadLink.download = getOutputFileName();
-        downloadLink.hidden = false;
 
         if (blob.size > 0) {
-          setStatus("변환 완료! 다운로드가 자동으로 시작됩니다.\n자동으로 시작되지 않으면 아래 다운로드 버튼을 누르세요.");
-          downloadLink.click();
+          outputUrl = URL.createObjectURL(blob);
+          downloadBtn.textContent = `${getOutputFileName()} 다운로드`;
+          downloadBtn.hidden = false;
+          downloadBtn.disabled = false;
+
+          outputPreview.src = outputUrl;
+          outputPreview.load();
+          outputWrap.hidden = false;
+          replayBtn.disabled = false;
+
+          if (wasStoppedByUser) {
+            setStatus("변환을 중지했습니다. 중지한 지점까지의 영상이 준비되었습니다.\n미리보기로 확인한 뒤 다운로드 버튼을 누르세요.");
+          } else {
+            progressBar.value = 100;
+            setStatus("변환 완료! 완성 영상을 미리보기로 확인한 뒤 다운로드 버튼을 누르세요.");
+          }
         } else {
           setStatus("변환 파일이 비어 있습니다. 짧은 영상으로 다시 테스트해 보세요.");
+          downloadBtn.hidden = true;
+          downloadBtn.disabled = true;
+          replayBtn.disabled = true;
+          outputWrap.hidden = true;
         }
         cleanupAfterConvert(true);
       };
@@ -552,20 +635,51 @@
       }
     });
 
+    downloadBtn.addEventListener("click", () => {
+      if (!outputUrl) {
+        setStatus("아직 다운로드할 변환 영상이 없습니다. 먼저 변환을 완료해 주세요.");
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = outputUrl;
+      a.download = getOutputFileName();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setStatus("다운로드를 시작했습니다. 브라우저 다운로드 목록을 확인해 주세요.");
+    });
+
+    replayBtn.addEventListener("click", async () => {
+      if (!outputUrl) {
+        setStatus("아직 재시청할 완성 영상이 없습니다. 먼저 변환을 완료해 주세요.");
+        return;
+      }
+      outputPreview.pause();
+      outputPreview.currentTime = 0;
+      try {
+        await outputPreview.play();
+        setStatus("완성 영상을 처음부터 다시 재생합니다.");
+      } catch (error) {
+        setStatus("재생 버튼을 한 번 더 눌러 주세요. 브라우저가 자동 재생을 막았을 수 있습니다.");
+      }
+    });
+
     stopBtn.addEventListener("click", () => {
       if (!isConverting) return;
+      wasStoppedByUser = true;
       video.pause();
       if (animationId) cancelAnimationFrame(animationId);
       if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.stop();
       }
-      setStatus("변환을 중지했습니다. 중지한 지점까지의 영상이 저장됩니다.");
+      setStatus("변환을 중지하는 중입니다...");
     });
 
     function cleanupAfterConvert(finished) {
       isConverting = false;
       if (animationId) cancelAnimationFrame(animationId);
       animationId = null;
+      previewBtn.disabled = false;
       startBtn.disabled = false;
       stopBtn.disabled = true;
       stopBtn.classList.remove("active");
