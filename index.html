@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>흑백 ASCII Video Converter</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --line: #2a2f3a;
+      --accent: #8b5cf6;
+      --accent2: #22c55e;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1d2030 0, var(--bg) 48%);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+
+    main {
+      width: min(1100px, 100%);
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 5vw, 46px);
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 18px;
+    }
+
+    .card {
+      background: rgba(23, 26, 33, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin: 18px 0 8px;
+    }
+
+    label:first-child { margin-top: 0; }
+
+    input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px dashed #52525b;
+      border-radius: 12px;
+      background: #0f1115;
+      color: var(--text);
+    }
+
+    input[type="range"] { width: 100%; }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      color: var(--muted);
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    button, .download {
+      border: 0;
+      border-radius: 12px;
+      padding: 13px 14px;
+      color: white;
+      font-weight: 800;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    #startBtn { background: linear-gradient(135deg, var(--accent), #3b82f6); }
+    #stopBtn { background: #3f3f46; }
+    #stopBtn.active { background: var(--danger); }
+    .download { display: block; background: linear-gradient(135deg, var(--accent2), #14b8a6); margin-top: 12px; }
+    .download[hidden] { display: none; }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    progress {
+      width: 100%;
+      height: 18px;
+      margin-top: 16px;
+      accent-color: var(--accent);
+    }
+
+    #status {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 42px;
+      white-space: pre-line;
+    }
+
+    .preview-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .canvas-wrap {
+      width: 100%;
+      overflow: auto;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: black;
+      max-height: 72vh;
+    }
+
+    canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      background: black;
+    }
+
+    video { display: none; }
+
+    .notice {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(139, 92, 246, 0.12);
+      color: #ddd6fe;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>흑백 ASCII Video Converter</h1>
+      <p>영상을 업로드하면 브라우저 안에서 흑백 아스키아트 영상으로 변환하고, 완성 후 자동 다운로드합니다.</p>
+    </section>
+
+    <section class="layout">
+      <aside class="card">
+        <label for="fileInput">1. 영상 업로드</label>
+        <input id="fileInput" type="file" accept="video/*" />
+
+        <label for="colsRange">2. 문자 해상도</label>
+        <div class="row"><span>낮음</span><strong><span id="colsValue">120</span> cols</strong><span>높음</span></div>
+        <input id="colsRange" type="range" min="60" max="220" step="10" value="120" />
+
+        <label for="fontRange">3. 글자 크기</label>
+        <div class="row"><span>작게</span><strong><span id="fontValue">10</span> px</strong><span>크게</span></div>
+        <input id="fontRange" type="range" min="7" max="18" step="1" value="10" />
+
+        <label for="fpsRange">4. 출력 FPS</label>
+        <div class="row"><span>가벼움</span><strong><span id="fpsValue">24</span> fps</strong><span>부드러움</span></div>
+        <input id="fpsRange" type="range" min="10" max="30" step="1" value="24" />
+
+        <div class="check-row">
+          <input id="audioCheck" type="checkbox" />
+          <span>가능하면 원본 오디오 포함</span>
+        </div>
+
+        <div class="buttons">
+          <button id="startBtn" disabled>변환 시작</button>
+          <button id="stopBtn" disabled>중지</button>
+        </div>
+
+        <progress id="progressBar" value="0" max="100"></progress>
+        <div id="status">영상을 선택해 주세요.</div>
+        <a id="downloadLink" class="download" hidden>변환된 영상 다운로드</a>
+
+        <div class="notice">
+          출력 형식은 브라우저 호환성이 좋은 <b>WebM</b>입니다. 긴 영상이나 높은 문자 해상도는 변환 중 브라우저가 느려질 수 있습니다.
+        </div>
+      </aside>
+
+      <section class="card">
+        <div class="preview-head">
+          <strong>미리보기</strong>
+          <span id="videoInfo">아직 영상 없음</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="asciiCanvas" width="960" height="540"></canvas>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <video id="sourceVideo" playsinline></video>
+
+  <script>
+    const ASCII_CHARS = "@%#*+=-:. "; // 어두움 -> 밝음
+
+    const fileInput = document.getElementById("fileInput");
+    const colsRange = document.getElementById("colsRange");
+    const fontRange = document.getElementById("fontRange");
+    const fpsRange = document.getElementById("fpsRange");
+    const colsValue = document.getElementById("colsValue");
+    const fontValue = document.getElementById("fontValue");
+    const fpsValue = document.getElementById("fpsValue");
+    const audioCheck = document.getElementById("audioCheck");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const progressBar = document.getElementById("progressBar");
+    const statusEl = document.getElementById("status");
+    const downloadLink = document.getElementById("downloadLink");
+    const videoInfo = document.getElementById("videoInfo");
+    const video = document.getElementById("sourceVideo");
+    const canvas = document.getElementById("asciiCanvas");
+    const ctx = canvas.getContext("2d", { alpha: false });
+
+    const smallCanvas = document.createElement("canvas");
+    const smallCtx = smallCanvas.getContext("2d", { willReadFrequently: true });
+
+    let objectUrl = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let animationId = null;
+    let outputUrl = null;
+    let audioContext = null;
+    let mediaElementSource = null;
+    let audioDestination = null;
+    let currentFileName = "ascii-video";
+    let isConverting = false;
+
+    function updateRangeLabels() {
+      colsValue.textContent = colsRange.value;
+      fontValue.textContent = fontRange.value;
+      fpsValue.textContent = fpsRange.value;
+    }
+
+    [colsRange, fontRange, fpsRange].forEach(input => {
+      input.addEventListener("input", updateRangeLabels);
+    });
+    updateRangeLabels();
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function resetDownload() {
+      if (outputUrl) URL.revokeObjectURL(outputUrl);
+      outputUrl = null;
+      downloadLink.hidden = true;
+      downloadLink.removeAttribute("href");
+    }
+
+    function pickMimeType() {
+      const candidates = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm"
+      ];
+      return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
+    }
+
+    function formatTime(seconds) {
+      if (!Number.isFinite(seconds)) return "00:00";
+      const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+      const s = Math.floor(seconds % 60).toString().padStart(2, "0");
+      return `${m}:${s}`;
+    }
+
+    function prepareCanvas() {
+      const cols = Number(colsRange.value);
+      const fontSize = Number(fontRange.value);
+      const videoW = video.videoWidth || 1280;
+      const videoH = video.videoHeight || 720;
+
+      // 글자는 세로로 길기 때문에 원본 비율을 그대로 쓰면 찌그러져 보임.
+      // 0.48은 글자의 세로/가로 비율을 보정하는 값.
+      const rows = Math.max(8, Math.floor((videoH / videoW) * cols * 0.48));
+      const lineHeight = Math.ceil(fontSize * 1.18);
+      const charWidth = fontSize * 0.62;
+      const padding = 20;
+
+      smallCanvas.width = cols;
+      smallCanvas.height = rows;
+      canvas.width = Math.ceil(cols * charWidth + padding * 2);
+      canvas.height = rows * lineHeight + padding * 2;
+
+      ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
+      ctx.textBaseline = "top";
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      return { cols, rows, fontSize, lineHeight, padding };
+    }
+
+    let canvasConfig = prepareCanvas();
+
+    function drawAsciiFrame() {
+      if (!video.videoWidth || !video.videoHeight) return;
+
+      const { cols, rows, fontSize, lineHeight, padding } = canvasConfig;
+      smallCtx.drawImage(video, 0, 0, cols, rows);
+      const frame = smallCtx.getImageData(0, 0, cols, rows).data;
+
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
+      ctx.textBaseline = "top";
+      ctx.fillStyle = "white";
+
+      for (let y = 0; y < rows; y++) {
+        let line = "";
+        for (let x = 0; x < cols; x++) {
+          const i = (y * cols + x) * 4;
+          const r = frame[i];
+          const g = frame[i + 1];
+          const b = frame[i + 2];
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          const charIndex = Math.floor((gray / 255) * (ASCII_CHARS.length - 1));
+          line += ASCII_CHARS[charIndex];
+        }
+        ctx.fillText(line, padding, padding + y * lineHeight);
+      }
+    }
+
+    function updateProgress() {
+      const duration = video.duration || 0;
+      const current = video.currentTime || 0;
+      const percent = duration ? Math.min(100, (current / duration) * 100) : 0;
+      progressBar.value = percent;
+      setStatus(
+        `변환 중... ${percent.toFixed(1)}%\n` +
+        `${formatTime(current)} / ${formatTime(duration)}`
+      );
+    }
+
+    function renderLoop() {
+      drawAsciiFrame();
+      updateProgress();
+      if (!video.ended && !video.paused && isConverting) {
+        animationId = requestAnimationFrame(renderLoop);
+      }
+    }
+
+    async function addAudioIfPossible(stream) {
+      if (!audioCheck.checked) return;
+
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error("AudioContext를 지원하지 않는 브라우저입니다.");
+
+        if (!audioContext || audioContext.state === "closed") {
+          audioContext = new AudioContextClass();
+          audioDestination = audioContext.createMediaStreamDestination();
+        }
+
+        if (!mediaElementSource) {
+          mediaElementSource = audioContext.createMediaElementSource(video);
+          mediaElementSource.connect(audioDestination);
+        }
+
+        if (audioContext.state === "suspended") {
+          await audioContext.resume();
+        }
+
+        audioDestination.stream.getAudioTracks().forEach(track => stream.addTrack(track));
+      } catch (error) {
+        console.warn(error);
+        setStatus("오디오 연결에 실패해서 무음 영상으로 변환합니다.\n" + error.message);
+      }
+    }
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      resetDownload();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(file);
+      currentFileName = file.name.replace(/\.[^.]+$/, "") || "ascii-video";
+
+      video.src = objectUrl;
+      video.load();
+      startBtn.disabled = true;
+      setStatus("영상 정보를 읽는 중입니다...");
+
+      video.onloadedmetadata = () => {
+        canvasConfig = prepareCanvas();
+        video.currentTime = 0;
+        videoInfo.textContent = `${video.videoWidth}×${video.videoHeight} · ${formatTime(video.duration)}`;
+        startBtn.disabled = false;
+        progressBar.value = 0;
+        setStatus("준비 완료. 변환 시작을 누르세요.");
+      };
+    });
+
+    startBtn.addEventListener("click", async () => {
+      if (!fileInput.files?.[0]) {
+        setStatus("먼저 영상을 업로드해 주세요.");
+        return;
+      }
+      if (!window.MediaRecorder || !canvas.captureStream) {
+        setStatus("이 브라우저는 MediaRecorder 또는 canvas.captureStream을 지원하지 않습니다. Chrome 또는 Edge를 권장합니다.");
+        return;
+      }
+
+      resetDownload();
+      recordedChunks = [];
+      isConverting = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      stopBtn.classList.add("active");
+      fileInput.disabled = true;
+      colsRange.disabled = true;
+      fontRange.disabled = true;
+      fpsRange.disabled = true;
+      audioCheck.disabled = true;
+
+      progressBar.value = 0;
+      canvasConfig = prepareCanvas();
+      video.currentTime = 0;
+      video.playbackRate = 1;
+      video.muted = !audioCheck.checked;
+
+      await new Promise(resolve => {
+        if (video.readyState >= 2) resolve();
+        else video.oncanplay = resolve;
+      });
+
+      const fps = Number(fpsRange.value);
+      const stream = canvas.captureStream(fps);
+      await addAudioIfPossible(stream);
+
+      const mimeType = pickMimeType();
+      try {
+        mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      } catch (error) {
+        setStatus("녹화 객체 생성에 실패했습니다. 브라우저를 Chrome 또는 Edge로 바꿔 보세요.\n" + error.message);
+        cleanupAfterConvert(false);
+        return;
+      }
+
+      mediaRecorder.ondataavailable = event => {
+        if (event.data && event.data.size > 0) recordedChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop());
+        const blob = new Blob(recordedChunks, { type: mimeType || "video/webm" });
+        outputUrl = URL.createObjectURL(blob);
+        downloadLink.href = outputUrl;
+        downloadLink.download = `${currentFileName}-ascii.webm`;
+        downloadLink.hidden = false;
+
+        if (blob.size > 0) {
+          setStatus("변환 완료! 다운로드가 자동으로 시작됩니다.\n자동으로 시작되지 않으면 아래 다운로드 버튼을 누르세요.");
+          downloadLink.click();
+        } else {
+          setStatus("변환 파일이 비어 있습니다. 짧은 영상으로 다시 테스트해 보세요.");
+        }
+        cleanupAfterConvert(true);
+      };
+
+      video.onended = () => {
+        progressBar.value = 100;
+        drawAsciiFrame();
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+          mediaRecorder.stop();
+        }
+      };
+
+      try {
+        mediaRecorder.start(1000);
+        await video.play();
+        renderLoop();
+      } catch (error) {
+        setStatus("변환 시작에 실패했습니다.\n" + error.message);
+        if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
+        cleanupAfterConvert(false);
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      if (!isConverting) return;
+      video.pause();
+      if (animationId) cancelAnimationFrame(animationId);
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+      }
+      setStatus("변환을 중지했습니다. 중지한 지점까지의 영상이 저장됩니다.");
+    });
+
+    function cleanupAfterConvert(finished) {
+      isConverting = false;
+      if (animationId) cancelAnimationFrame(animationId);
+      animationId = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      stopBtn.classList.remove("active");
+      fileInput.disabled = false;
+      colsRange.disabled = false;
+      fontRange.disabled = false;
+      fpsRange.disabled = false;
+      audioCheck.disabled = false;
+      if (!finished) video.pause();
+    }
+
+    // 첫 화면 검은 캔버스
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "white";
+    ctx.font = "18px monospace";
+    ctx.fillText("Upload a video to convert it into ASCII art.", 24, 32);
+  </script>
+</body>
+</html>
